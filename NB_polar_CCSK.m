@@ -56,7 +56,7 @@ FER = 0;
 
 msg = sprintf("SNR_dB = %.3f dB, FER = %d/%d = %.8f\n", SNRs_db, 0, 0, 0); fprintf(msg)
 for  gen_seq_cnt=1:max_gen
-    info_seq = randi([0 q-1],N,1); %generate N random symbol to encode (N instead K!!)
+    info_seq = randi([0 q-1],N,1); %generate N random symbol to encode (N instead of K!!)
     u = info_seq;
     x=encode(u); %x is the encoded sequence to be transmitted
     % uu = inv_encode(x); inverse encoding
@@ -67,7 +67,7 @@ for  gen_seq_cnt=1:max_gen
     end
     nse = sigma*randn(size(etax));
     y = etax + nse;
-    %             L  = (LLR_CCSK(y, etaq, q, N, sigma(i0)^2));
+    % L  = (LLR_CCSK(y, etaq, q, N, sigma(i0)^2));
     L  = LLR_CCSK_FFT(y, eta0, N, sigma);
     %%
     decw = polar_nb_dec(L, Hadamard, reliab_seq, frozen_symbols, 1);
