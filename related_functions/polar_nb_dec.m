@@ -143,11 +143,14 @@ while i>0
         lg = length(Int{i}(j,:))/2;
         temp_s = V(i+1,ii2);
         if ~is_freq{i}(j)
-            for k = 1:lg
-                idx = bitxor(temp_s(k), 0:q-1) + 1;
-                C = A(idx,k) .* B(:,k);
-                C = C ./ sum(C);
-                L(i+1, idxB(k), :) = C;
+            for i4=1:lg
+                temp_a =reshape(L(i,ii1(i4),:), [], 1);
+                temp_b =reshape(L(i,ii1(i4)+lg,:), [], 1);
+                i5 = 0:q-1;
+                temp_x = bitxor(temp_s(i4), i5);
+                temp_c = temp_a(temp_x+1).*temp_b(i5+1);
+                temp_c = temp_c/sum(temp_c);
+                L(i+1,ii1(i4)+lg,:) = temp_c;
             end
         else
             for i4=1:lg
