@@ -71,10 +71,8 @@ q = size(prb1, 1);
 n = log2(N);
 
 if is_LLR
-    for ii=1:N
-        prb1(:,ii) = exp(-prb1(:,ii));
-        prb1(:,ii) = prb1(:,ii)/sum(prb1(:,ii));
-    end
+    prb1 = exp(-prb1);
+    prb1 = prb1./sum(prb1,1);
 end
 decw = nan(N,1);
 V = nan(n+1, N); %2D matrix contain the decoded symbol at each of the n+1 layer (layer 1 corrspond the the encoder input side)
@@ -153,23 +151,26 @@ while i>0
                     temp_x = bitxor(temp_s(i4), i5);
                     temp_c(i5+1) = temp_a(temp_x)*temp_b(i5+1);
                 end
+                temp_c = temp_c/sum(temp_c);
                 L(i+1,ii1(i4)+lg,:) = temp_c;
             end
         else
             for i4=1:lg
 
                 temp_a =reshape(L(i,ii1(i4),:), [], 1);
-                % temp_b =reshape(L(i,ii1(i4)+lg,:), [], 1);
+                temp_b =reshape(L(i,ii1(i4)+lg,:), [], 1);
                 temp_c = Hadamard(:, temp_s(i4)+1) .*temp_a;
-                % temp_a = fwht(temp_a);
-                % temp_b = fwht(temp_b);
+                temp_a = fwht(temp_a);
+                temp_b = fwht(temp_b);
                 temp_c = fwht(temp_c);
-                % L(i,ii1(i4),:) = temp_a;
-                % L(i,ii1(i4)+lg,:) = temp_b;
+                L(i,ii1(i4),:) = temp_a;
+                L(i,ii1(i4)+lg,:) = temp_b;
+                temp_c =  temp_c.*temp_b;
+                temp_c = temp_c/sum(temp_c);
                 L(i+1,ii1(i4)+lg,:) = temp_c;
             end
         end
-        % is_freq{i}(j) = false;
+        is_freq{i}(j) = false;
         i = i+1;
         j=2*j;
         if(i<=n)
