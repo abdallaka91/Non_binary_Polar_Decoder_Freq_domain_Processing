@@ -74,6 +74,7 @@ if is_LLR
     prb1 = exp(-prb1);
     prb1 = prb1./sum(prb1,1);
 end
+
 decw = nan(N,1);
 V = nan(n+1, N); %2D matrix contain the decoded symbol at each of the n+1 layer (layer 1 corrspond the the encoder input side)
 V(n+1,reliab_seq(1:N_K)) = frozen_symbols;
@@ -141,18 +142,12 @@ while i>0
         ii2=Int{i+1}(2*j-1,:);
         lg = length(Int{i}(j,:))/2;
         temp_s = V(i+1,ii2);
-        temp_c = -ones(q,1);
         if ~is_freq{i}(j)
-            for i4=1:lg
-                temp_a =reshape(L(i,ii1(i4),:), [], 1);
-                temp_b =reshape(L(i,ii1(i4)+lg,:), [], 1);
-
-                for i5=0:q-1
-                    temp_x = bitxor(temp_s(i4), i5);
-                    temp_c(i5+1) = temp_a(temp_x)*temp_b(i5+1);
-                end
-                temp_c = temp_c/sum(temp_c);
-                L(i+1,ii1(i4)+lg,:) = temp_c;
+            for k = 1:lg
+                idx = bitxor(temp_s(k), 0:q-1) + 1;
+                C = A(idx,k) .* B(:,k);
+                C = C ./ sum(C);
+                L(i+1, idxB(k), :) = C;
             end
         else
             for i4=1:lg
@@ -192,20 +187,14 @@ while i>0
             stat_v{i}(j) = true;
         else
             if ~is_freq{i}(j)
-                for i4=1:lg
-                    L(i,ii1(i4),:) = fwht(reshape(L(i,ii1(i4),:), [], 1)) * q;
-                    L(i,ii1(i4)+lg,:) =fwht(reshape(L(i,ii1(i4)+lg,:), [], 1)) * q;
-                end
+                idx_all = [ii1(1:lg), ii1(1:lg)+lg];
+                block = squeeze(L(i, idx_all, :)).';
+                block = fwht(block) * q;
+                L(i, idx_all, :) = permute(block, [3 2 1]);
                 is_freq{i}(j) = true;
             end
-            for i4=1:lg
+            L(i+1, ii1(1:lg), :) = L(i, ii1(1:lg), :) .* L(i, ii1(1:lg)+lg, :);
 
-                temp_a = reshape(L(i,ii1(i4),:), [], 1);
-                temp_b = reshape(L(i,ii1(i4)+lg,:), [], 1);
-
-                temp_c = temp_a .*temp_b;
-                L(i+1,ii1(i4),:) =  temp_c;
-            end
             if(i<n)
                 is_freq{i+1}(2*j-1) = true;
             end
@@ -227,4 +216,5 @@ while i>0
         end
     end
     decw = V(n+1,:)';
+end
 end
