@@ -56,7 +56,7 @@ The file **`data.rar`** contains **reliability sequences** and related data for 
 **Contents:**
 - Code lengths **N = 2, 4, 8, ..., 512**
 - Field sizes **GF(8), GF(16), GF(32), GF(64), GF(128), GF(256)**
-- SNR range **from –25 dB to 0 dB**
+- SNR range **from –22 dB to 0 dB**
 
 Each text file inside contains:
 1. Reliability sequence based on channel **entropies** (least → most reliable)
