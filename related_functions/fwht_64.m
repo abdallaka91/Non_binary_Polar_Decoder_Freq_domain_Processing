@@ -1,0 +1,52 @@
+function inp = fwht_64(inp)
+    half = 32;
+    part1 = inp(1:half) + inp(half+1:end);
+    part2 = inp(1:half) - inp(half+1:end);
+    part1 = fwht_32(part1);
+    part2 = fwht_32(part2);
+    inp = [part1; part2];
+end
+function inp = fwht_32(inp)
+    half = 16;
+    part1 = inp(1:half) + inp(half+1:end);
+    part2 = inp(1:half) - inp(half+1:end);
+    part1 = fwht_16(part1);
+    part2 = fwht_16(part2);
+    inp = [part1; part2];
+end
+function inp = fwht_16(inp)
+    half = 8;
+    part1 = inp(1:half) + inp(half+1:end);
+    part2 = inp(1:half) - inp(half+1:end);
+    part1 = fwht_8(part1);
+    part2 = fwht_8(part2);
+    inp = [part1; part2];
+end
+function inp = fwht_8(inp)
+    L1 = zeros(8,1);
+    L2 = zeros(8,1);
+    L1(1) = inp(1) + inp(5);
+    L1(2) = inp(2) + inp(6);
+    L1(3) = inp(3) + inp(7);
+    L1(4) = inp(4) + inp(8);
+    L1(5) = inp(1) - inp(5);
+    L1(6) = inp(2) - inp(6);
+    L1(7) = inp(3) - inp(7);
+    L1(8) = inp(4) - inp(8);
+    L2(1) = L1(1) + L1(3);
+    L2(3) = L1(1) - L1(3);
+    L2(2) = L1(2) + L1(4);
+    L2(4) = L1(2) - L1(4);
+    L2(5) = L1(5) + L1(7);
+    L2(7) = L1(5) - L1(7);
+    L2(6) = L1(6) + L1(8);
+    L2(8) = L1(6) - L1(8);
+    inp(1) = L2(1) + L2(2);
+    inp(2) = L2(1) - L2(2);
+    inp(3) = L2(3) + L2(4);
+    inp(4) = L2(3) - L2(4);
+    inp(5) = L2(5) + L2(6);
+    inp(6) = L2(5) - L2(6);
+    inp(7) = L2(7) + L2(8);
+    inp(8) = L2(7) - L2(8);
+end

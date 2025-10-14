@@ -4,10 +4,10 @@ pth1 = ( '.\related_functions');
 addpath(pth1);
 rng(0);
 max_gen = 1e4; %MontCarlo simulation count
-q=256;  %GF(q)
+q=64;  %GF(q)
 N = 64; %code length
 K = 42; % information sequence length
-SNRs_db=-10.5;
+SNRs_db=-7.5;
 if q==64
     CCSK_seq_str = '0111011001011101011001110000010000101110000111011100100001101011'; %GF64
 elseif q==128
@@ -18,7 +18,7 @@ elseif q==512
     CCSK_seq_str = '10100000110010000011000111111100011010100110101011010000101111100000011111010101101011000100010100000101011000001011011011011000101110100011001101000000000101111011101100100000011011111011111110001110101001100010000010111011000111010010110010000111100100101011110100011010001110000111100011110011001010100010101111001100011101101100100000110001000010000011010010001011100111111111010101000111000111100111100110011100100101111011100100100100111100101110011000110111101100111111011110110000000111110110010101001000';
 end
 
-pth = sprintf('..\\NB_PC_reliab_seq\\GF%d_ccsk_reliab_seq_L2H\\N%d\\', q, N);
+pth = sprintf('..\\reliab_seq_diff_GF_diff_N_diff_SNR\\GF%d_ccsk_reliab_seq_L2H\\N%d\\', q, N);
 fl_nm = sprintf('mat_N%d_GF%d_SNR%.3f.txt', N, q, SNRs_db);
 data = read_reliability_seq([pth fl_nm]);
 
@@ -40,7 +40,7 @@ N0 = 1./(SNRs);
 sigma = sqrt(N0);
 I1=bi2de(fliplr(de2bi((0:N-1)', n)));
 
-reliab_seq = data.relab_seq_prob+1;% +1 because if channel indexing startes from 0
+reliab_seq = data.reliab_seq_prob+1;% +1 because if channel indexing startes from 0
 %%
 
 
