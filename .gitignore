@@ -15,6 +15,9 @@
 *.tmp
 *.mat
 
+# relaibility folder
+reliab_seq_diff_GF_diff_N_diff_SNR/
+
 # --- Compiled binaries ---
 *.mex*
 *.exe

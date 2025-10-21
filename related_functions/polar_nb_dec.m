@@ -1,90 +1,115 @@
+% -----------------------------------------------------------------------------
+% File Name     : polar_nb_dec.m
+% Description   : Non-binary polar decoder over GF(2^p) using frequency-domain
+%                 belief propagation (hybrid CN–VN updates).
+% Author        : Abdallah Abdallah (abdallah.abdallah@univ-ubs.fr)
+% Organization  : Lab-STICC, UMR 6285, Université Bretagne Sud
+% Date          : October 13, 2025
+% License       : CeCILL-B, see LICENSE file:
+%                 https://cecill.info/licences/Licence_CeCILL-B_V1-en.html
+%
+% Note          : This work has been funded by the French ANR project MIOT
+%                 under grant ANR-24-CE93-0017
+%                 Website: https://project.inria.fr/miot/
+% -----------------------------------------------------------------------------
+% History:
+%   - Created: 13/10/2025
+% -----------------------------------------------------------------------------
+% Functional Description:
+%
+%   POLAR_NB_DEC performs soft-decision decoding of non-binary polar codes
+%   defined over GF(2^p). The decoder alternates between:
+%     • Check Node (CN) updates → executed in the frequency domain using FWHT.
+%     • Variable Node (VN) updates → performed in either probability or frequency
+%       domain depending on the layer and the data representation.
+%
+%   Each CN–VN kernel connects two branches (A, B) and produces two outputs:
+%
+%     CN_output ◄────⊕────── A
+%                     │
+%                     ▼
+%     VN_output ◄────=────── B
+%
+%   - CN operation (⊕): GF(2^p) addition between A and B.
+%   - VN operation (=): element-wise likelihood refinement.
+%
+%       • If A,B in probability domain:
+%             permute(A ⊕ symbol) × B
+%       • If A,B in frequency domain:
+%             convert B → probability
+%             keep A in frequency domain
+%             multiply (Hadamard(:,symbol) ⊙ A)
+%             convert result → probability
+%             elementwise multiply with B
+%
+%   The “symbol” corresponds to the frozen or hard-decision symbol decided at
+%   the CN output for the current kernel.
+%
+% -----------------------------------------------------------------------------
+% INPUTS:
+%   prb1           : [q × N] matrix, channel LLRs or probabilities per symbol
+%   Hadamard       : [q × q] precomputed normalized FWHT basis
+%   reliab_seq     : [1 × N] reliability sequence (least → most reliable)
+%   frozen_symbols : [(N−K) × 1] frozen symbols (encoder side)
+%   is_LLR         : boolean, true if prb1 contains LLRs, false if probabilities
+%
+% OUTPUT:
+%   decw           : [N × 1] decoded codeword (symbols in GF(2^p))
+%
+% -----------------------------------------------------------------------------
+% INTERNAL VARIABLES:
+%   N, q, n   : code length, GF size, and log2(N)
+%   V         : decision matrix per decoding layer
+%   L         : 3D tensor of message probabilities (layer × node × q)
+%   stat_v    : logical masks for processed clusters or nodes
+%   is_freq   : indicator of frequency-domain representation per node
+%   Int       : index map of input channels per layer i and node j
+% -----------------------------------------------------------------------------
+% Decoding tree node structure:
+% Each node (i,j) at layer i splits into two child nodes at layer (i+1):
+% one indexed (2*j−1) and the other (2*j). Each pair of sibling nodes at layer i
+% shares a common parent node located at layer (i−1) with index (j+1)/2.
+%
+% The diagram below illustrates the hierarchical relationship between layers:
+%   
+%                        (i−1,(j+1)/2)
+%                            │
+%            ┌───────────────┴────────────────┐
+%            │                                │
+%            ▼                                ▼
+%          (i,j)                            (i,j+1)
+%      ┌─────┴──────┐                   ┌─────┴──────┐  
+%      ▼            ▼                   ▼            ▼ 
+%  (i+1,2*j−1)  (i+1,2*j)       (i+1,2*(j+1)−1)  (i+1,2*(j+1)) 
+% -----------------------------------------------------------------------------
+
 function decw = polar_nb_dec(prb1, Hadamard, reliab_seq, frozen_symbols, is_LLR)
 
-%POLAR_NB_DEC  Non-binary polar decoder using probabilistic or LLR inputs.
-%
-%   decw = POLAR_NB_DEC(prb1, Hadamard, reliab_seq, frozen_symbols, is_LLR)
-%
-%   Performs non-binary polar decoding over GF(2^p) using belief propagation
-%   in the frequency domain. The decoding alternates between Check Node (CN)
-%   and Variable Node (VN) operations. CN updates are performed efficiently
-%   using Fast Walsh–Hadamard Transforms (FWHT), while VN updates use
-%   precomputed Hadamard-domain tables to avoid repeated FWHT computations.
-%
-%   INPUT ARGUMENTS:
-%     1) prb1 : [q x N] matrix
-%         - Each column corresponds to one symbol position.
-%         - Each column is either:
-%             • a probability vector (sum = 1), or
-%             • a Log-Likelihood Ratio (LLR) vector.
-%         - q = 2^p (the GF alphabet size).
-%         - If LLRs are used, set is_LLR = true.
-%
-%     2) Hadamard : [q x q] matrix
-%         - Contains the normalized FWHT of all GF(2^p) symbols.
-%         - Each column corresponds to one symbol in the Hadamard domain.
-%         - Example generation:
-%
-%             Hadamard = zeros(q,q);
-%             for i = 1:q
-%                 Hadamard(i,i) = 1;
-%                 Hadamard(:,i) = fwht(Hadamard(:,i)) * q;
-%             end
-%
-%     3) reliab_seq : [1 x N] vector
-%         - Reliability sequence from least to most reliable bit channels.
-%
-%     4) frozen_symbols : [1 x (N−K)] vector
-%         - Frozen symbols used during encoding, assigned as:
-%             u(reliab_seq(1:N-K)) = frozen_symbols
-%           where K is the number of information symbols (code rate = K/N).
-%
-%     5) is_LLR : logical flag
-%         - true  → 'prb1' contains LLRs.
-%         - false → 'prb1' contains probabilities (must be normalized).
-%
-%   OUTPUT:
-%     decw : [1 x N] decoded codeword over GF(2^p).
-%
-%   INTERNAL DETAILS:
-%     • Check Node (CN) operations are executed in the frequency domain using FWHT
-%       to efficiently perform convolutions in GF(2^p).
-%
-%     • Variable Node (VN) updates reuse precomputed Hadamard-domain tables
-%       (provided via the input 'Hadamard') to accelerate likelihood propagation
-%       without requiring an explicit FWHT at every iteration.
-%
-%   EXAMPLE:
-%       decw = polar_nb_dec(prb1, Hadamard, reliab_seq, frozen_symbols, true);
-%
-%   SEE ALSO:
-%       FWHT, POLAR_ENC, POLAR_DEC, POLAR_NB_ENC
-%
-% -------------------------------------------------------------------------
-% Author: Abdallah Abdallah
-% Version: 1.1
-% Description: Non-binary polar decoder (GF(2^p)) using hybrid CN–VN frequency-domain updates
-% -------------------------------------------------------------------------
-
 N_K = length(frozen_symbols);
-N = size(prb1, 2);
-q = size(prb1, 1);
-n = log2(N);
+N   = size(prb1, 2);
+q   = size(prb1, 1);
+n   = log2(N);
 
+% Convert from LLR to probability if needed
 if is_LLR
     prb1 = exp(-prb1);
-    prb1 = prb1./sum(prb1,1);
+    prb1 = prb1 ./ sum(prb1, 1);
 end
 
+% Initialize decoded word and decision matrix
 decw = nan(N,1);
-V = nan(n+1, N); %2D matrix contain the decoded symbol at each of the n+1 layer (layer 1 corrspond the the encoder input side)
-V(n+1,reliab_seq(1:N_K)) = frozen_symbols;
+V = nan(n+1, N);
+V(n+1, reliab_seq(1:N_K)) = frozen_symbols;
 
-for l=n:-1:1
-    for t=0:N/2-1
+% Propagate frozen values down through the decoding tree to avoid
+% performing unecssary VN/CN operations
+for l = n:-1:1
+    for t = 0:N/2-1
         j = 2^(n-l);
-        a=2*t-mod(t,j)+1;
-        b=j+2*t-mod(t,j)+1;
-        A = V(l+1, a); B = V(l+1, b);
+        a = 2*t - mod(t,j) + 1;
+        b = j + 2*t - mod(t,j) + 1;
+        A = V(l+1, a); 
+        B = V(l+1, b);
         if ~isnan(A+B)
             V(l, a) = bitxor(A, B);
             V(l, b) = B;
@@ -92,132 +117,123 @@ for l=n:-1:1
     end
 end
 
-L = zeros(n+1, N,q); %3D matrix of n+1 layers, the first layer contains the channel observation probabilities of each received symbol
-L(1,:,:) = prb1'; %initialize 1st layer with channel observation input
-stat_v = cell(n+1,1); %each layer contain 2^(l-1) cluster starting from layer l=0 corresponding to the decoder input side (channel side).
-% stat_v{l}(cluster_idx is boolean 1 if it is treated, false if else.
-for i = 1 : n+1
-    i0 = i-1;
-    stat_v{i,1} = false(1,  2^(i0)); % at the begining, all clusters aren't treated
-end
+% Initialize likelihood containers
+prob_3d = zeros(n+1, N, q);
+prob_3d(1,:,:) = prb1';   % first layer = channel likelihoods
 
-
-is_freq = cell(n, 1); %is freq_is an indicator that tells if the data presented at the cluster inputs is in freq domain
-Int = cell(n,1);%list on channel indexes of each cluster at each layer
-for i = 1 : n+1
-
-    mi = 2^(i-1);
-    li = N/mi;
-    if i<=n
-        is_freq{i} = false(1, mi);
+node_state = cell(n+1,1);
+node_input_is_freq = cell(n,1);
+node_inpts_indices = cell(n,1);
+for i = 1:n+1
+    nb_nodes = 2^(i-1);
+    node_state{i,1} = false(1, nb_nodes); %at each layer i, there is 2^(i-1) nodes
+    li = N/nb_nodes; %node input size
+    if i <= n
+        node_input_is_freq{i} = false(1, nb_nodes);
     end
-    for j = 0:mi-1
-        Int{i}(j+1,:) = j*li+1:j*li+1+li-1;
+    for j = 0:nb_nodes-1
+        node_inpts_indices{i}(j+1,:) = j*li + (1:li); %node input channels indices
     end
 end
 
-i = 1;
-j = 1;
-
-while i>0
-    if stat_v{i}(j)
-        if mod(j,2)==0
-            i=i-1;
-            j=j/2;
-            ii1 = Int{i}(j,:);
+% -------------------------------------------------------------------------
+% Main decoding loop
+% -------------------------------------------------------------------------
+i = 1; j = 1; % i: layer index, j: node index
+while i > 0
+    if node_state{i}(j)  % if current node has already processed
+        if mod(j,2) == 0 % if node is VN → backpropagate symbols to parent
+            i = i - 1;
+            j = j / 2;
+            ii1 = node_inpts_indices{i}(j,:);
             temp0 = V(i+1,ii1);
             lg = length(ii1)/2;
-            for i4=1:lg
-
-                V(i,ii1(i4)) = bitxor(temp0(i4), temp0(i4+lg));
-                V(i,ii1(i4+lg)) = temp0(i4+lg);
+            for k = 1:lg
+                V(i,ii1(k))      = bitxor(temp0(k), temp0(k+lg));  % XOR backprop
+                V(i,ii1(k+lg))   = temp0(k+lg);                    % equality path
             end
-            stat_v{i}(j) = true;
-        else
-            i = i-1;
-            j=(j+1)/2;
+            node_state{i}(j) = true;
+        else % if node is CN → go to its parent to process VN
+            i = i - 1;
+            j = (j + 1)/2;
         end
-    elseif stat_v{i+1}(2*j-1)
-        ii1=Int{i}(j,:);
-        ii2=Int{i+1}(2*j-1,:);
-        lg = length(Int{i}(j,:))/2;
-        temp_s = V(i+1,ii2);
-        if ~is_freq{i}(j)
-            for i4=1:lg
-                temp_a =reshape(L(i,ii1(i4),:), [], 1);
-                temp_b =reshape(L(i,ii1(i4)+lg,:), [], 1);
-                i5 = 0:q-1;
-                temp_x = bitxor(temp_s(i4), i5);
-                temp_c = temp_a(temp_x+1).*temp_b(i5+1);
-                temp_c = temp_c/sum(temp_c);
-                L(i+1,ii1(i4)+lg,:) = temp_c;
-            end
-        else
-            for i4=1:lg
 
-                temp_a =reshape(L(i,ii1(i4),:), [], 1);
-                temp_b =reshape(L(i,ii1(i4)+lg,:), [], 1);
-                temp_c = Hadamard(:, temp_s(i4)+1) .*temp_a;
+    elseif node_state{i+1}(2*j-1) % if left child processed → perform VN update
+        ii1 = node_inpts_indices{i}(j,:);
+        ii2 = node_inpts_indices{i+1}(2*j-1,:);
+        lg  = length(ii1)/2;
+        temp_s = V(i+1, ii2);  % symbol (frozen or hard-decision)
+
+        % ---------- Variable Node (VN) Processing ----------
+        if ~node_input_is_freq{i}(j) % VN in probability domain
+            for k = 1:lg
+                temp_a = reshape(prob_3d(i, ii1(k), :), [], 1);
+                temp_b = reshape(prob_3d(i, ii1(k)+lg, :), [], 1);
+                idx = bitxor(temp_s(k), 0:q-1) + 1;
+                temp_c = temp_a(idx) .* temp_b;
+                temp_c = temp_c / sum(temp_c);
+                prob_3d(i+1, ii1(k)+lg, :) = temp_c;
+            end
+        else % VN in frequency domain
+            for k = 1:lg
+                temp_a = reshape(prob_3d(i, ii1(k), :), [], 1);
+                temp_b = reshape(prob_3d(i, ii1(k)+lg, :), [], 1);
+                temp_c = Hadamard(:, temp_s(k)+1) .* temp_a;
                 temp_a = fwht(temp_a);
                 temp_b = fwht(temp_b);
                 temp_c = fwht(temp_c);
-                L(i,ii1(i4),:) = temp_a;
-                L(i,ii1(i4)+lg,:) = temp_b;
-                temp_c =  temp_c.*temp_b;
-                temp_c = temp_c/sum(temp_c);
-                L(i+1,ii1(i4)+lg,:) = temp_c;
+                prob_3d(i, ii1(k), :)       = temp_a;
+                prob_3d(i, ii1(k)+lg, :)    = temp_b;
+                temp_c = temp_c .* temp_b;
+                temp_c = temp_c / sum(temp_c);
+                prob_3d(i+1, ii1(k)+lg, :)  = temp_c;
             end
         end
-        is_freq{i}(j) = false;
-        i = i+1;
-        j=2*j;
-        if(i<=n)
-            is_freq{i}(j) = false;
+        % ---------------------------------------------------
+
+        node_input_is_freq{i}(j) = false; % VN output is always in probability domain
+        i = i + 1; j = 2*j;
+        if i <= n
+            node_input_is_freq{i}(j) = false;
         end
-        if i==n+1
-            stat_v{i}(j)=true;
+        if i == n+1
+            node_state{i}(j) = true;
             if isnan(V(n+1, j))
-                [mm,nn] = max(L(i,j,:));
-                nn=nn-1;
-                V(n+1,j) = nn;
+                [~, nn] = max(prob_3d(i,j,:));
+                V(n+1,j) = nn - 1;
             end
         end
 
-    else
-        lg = length(Int{i}(j,:))/2;
-        ii1=Int{i}(j,:);
-        if(~isnan(V(i+1, ii1)))
-            stat_v{i}(j) = true;
+    else  % if left child not processed → perform CN update
+        lg = length(node_inpts_indices{i}(j,:))/2;
+        ii1 = node_inpts_indices{i}(j,:);
+        if ~isnan(V(i+1, ii1))
+            node_state{i}(j) = true;
         else
-            if ~is_freq{i}(j)
+            if ~node_input_is_freq{i}(j)
                 idx_all = [ii1(1:lg), ii1(1:lg)+lg];
-                block = squeeze(L(i, idx_all, :)).';
+                block = squeeze(prob_3d(i, idx_all, :)).';
                 block = fwht(block) * q;
-                L(i, idx_all, :) = permute(block, [3 2 1]);
-                is_freq{i}(j) = true;
+                prob_3d(i, idx_all, :) = permute(block, [3 2 1]);
+                node_input_is_freq{i}(j) = true;
             end
-            L(i+1, ii1(1:lg), :) = L(i, ii1(1:lg), :) .* L(i, ii1(1:lg)+lg, :);
-
-            if(i<n)
-                is_freq{i+1}(2*j-1) = true;
+            prob_3d(i+1, ii1(1:lg), :) = prob_3d(i, ii1(1:lg), :) .* prob_3d(i, ii1(1:lg)+lg, :);
+            if i < n
+                node_input_is_freq{i+1}(2*j-1) = true;
             end
-            i=i+1;
-            j=2*j-1;
+            i = i + 1; j = 2*j - 1;
 
-
-            if i==n+1
-                stat_v{i}(j)=true;
+            if i == n+1
+                node_state{i}(j) = true;
                 if isnan(V(n+1, j))
-                    temp = fwht(reshape(L(i,j,:), [], 1));
-                    [mm,nn] = max(temp);
-                    nn=nn-1;
-                    V(n+1,j) = nn;
+                    temp = fwht(reshape(prob_3d(i,j,:), [], 1));
+                    [~, nn] = max(temp);
+                    V(n+1,j) = nn - 1;
                 end
-                i=i-1;
-                j=(j+1)/2;
+                i = i - 1; j = (j + 1)/2;
             end
         end
     end
-    decw = V(n+1,:)';
 end
+decw = V(n+1,:)';
 end

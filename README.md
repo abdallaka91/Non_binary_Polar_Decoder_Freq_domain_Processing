@@ -56,7 +56,7 @@ The file **`data.rar`** contains **reliability sequences** and related data for 
 **Contents:**
 - Code lengths **N = 2, 4, 8, ..., 512**
 - Field sizes **GF(8), GF(16), GF(32), GF(64), GF(128), GF(256)**
-- SNR range **from –22 dB to 0 dB**
+- A **diverse set of SNR values**, specific to each configuration.  
 
 Each text file inside contains:
 1. Reliability sequence based on channel **entropies** (least → most reliable)
@@ -72,4 +72,17 @@ That means the **first element corresponds to the least reliable** sub-channel.
 ---
 
 ## 📂 Repository Structure
+
+
+---
+
+## 📜 License & Attribution
+
+This project is released under the **CeCILL-B license** (a French open-source license compatible with the GNU GPL).  
+See the full text here: [CeCILL-B License](https://cecill.info/licences/Licence_CeCILL-B_V1-en.html).
+
+**Author:** Abdallah Abdallah  
+**Affiliation:** Lab-STICC, UMR 6285, Université Bretagne Sud  
+**Funding:** ANR Project MIOT (Grant ANR-24-CE93-0017)  
+**Website:** [https://project.inria.fr/miot/](https://project.inria.fr/miot/)
 
