@@ -51,9 +51,10 @@ rng(0);                          % Fix random seed for reproducibility
 
 max_gen = 1e4;       % Monte Carlo simulation count
 q = 64;              % GF(q)
-N = 1024;            % Code length
-K = 171;             % Number of information symbols
-SNRs_db = -15;       % SNR in dB
+N = 64;            % Code length
+K = 42;             % Number of information symbols
+N_K = N - K;         % Number of frozen symbols
+SNRs_db = -7.5;       % SNR in dB
 
 %% --- DEFINE CCSK MODULATION SEQUENCE ---------------------------------------
 if q == 64
@@ -107,16 +108,15 @@ msg = sprintf("SNR_dB = %.3f dB, FER = %d/%d = %.8f\n", SNRs_db, 0, 0, 0);
 fprintf(msg);
 
 %% --- MONTE CARLO SIMULATION LOOP -------------------------------------------
+% ----- 1. initialize encoder input vector -----
+u = zeros(N, 1); 
 for gen_seq_cnt = 1:max_gen
     % ----- 1. Information generation -----
-    info_seq = randi([0 q-1], N, 1);
-    u = info_seq;
+    info_seq = randi([0 q-1], K, 1);
+    u(reliab_seq(N_K+1:N)) = info_seq;
 
     % ----- 2. Encoding -----
     x = encode(u);
-
-    % Define frozen symbols from least reliable channels
-    frozen_symbols = u(reliab_seq(1:N-K));
 
     % ----- 3. CCSK modulation -----
     x_mod = zeros(q, N);
@@ -131,7 +131,7 @@ for gen_seq_cnt = 1:max_gen
     % ----- 5. LLR computation -----
     LLR = LLR_CCSK_FFT(y, PN_bin, sigma);
     % ----- 6. Decoding -----
-    decw = polar_nb_dec(LLR, Hadamard, reliab_seq, frozen_symbols, true);
+    decw = polar_nb_dec(LLR, Hadamard, reliab_seq, N_K, true);
 
     % ----- 7. Error counting -----
     FE = FE + ~isequal(decw, u);
