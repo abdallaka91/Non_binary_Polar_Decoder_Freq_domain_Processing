@@ -46,7 +46,12 @@
 %% --- INITIALIZATION --------------------------------------------------------
 clear; clc;
 
-addpath('.\related_functions');  % Add path for related functions
+if isunix
+  addpath('./related_functions');  % Add path for related functions
+else
+  addpath('.\related_functions');  % Add path for related functions
+end
+
 rng(0);                          % Fix random seed for reproducibility
 
 max_gen = 1e4;       % Monte Carlo simulation count
@@ -70,7 +75,11 @@ else
 end
 
 %% --- LOAD RELIABILITY SEQUENCE ---------------------------------------------
-pth = sprintf('.\\reliab_seq_diff_GF_diff_N_diff_SNR\\GF%d_ccsk_reliab_seq_L2H\\N%d\\', q, N);
+if isunix
+  pth = sprintf('.//reliab_seq_diff_GF_diff_N_diff_SNR//GF%d_ccsk_reliab_seq_L2H//N%d//', q, N);
+else
+  pth = sprintf('.//reliab_seq_diff_GF_diff_N_diff_SNR\\GF%d_ccsk_reliab_seq_L2H\\N%d\\', q, N);
+end
 fl_nm = sprintf('mat_N%d_GF%d_SNR%.3f.txt', N, q, SNRs_db);
 data = read_reliability_seq([pth fl_nm]);
 
@@ -109,7 +118,7 @@ fprintf(msg);
 
 %% --- MONTE CARLO SIMULATION LOOP -------------------------------------------
 % ----- 1. initialize encoder input vector -----
-u = zeros(N, 1); 
+u = zeros(N, 1);
 for gen_seq_cnt = 1:max_gen
     % ----- 1. Information generation -----
     info_seq = randi([0 q-1], K, 1);
