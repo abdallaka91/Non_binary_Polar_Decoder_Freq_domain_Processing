@@ -50,7 +50,7 @@
 %   prb1           : [q × N] matrix, channel LLRs or probabilities per symbol
 %   Hadamard       : [q × q] precomputed normalized FWHT basis
 %   reliab_seq     : [1 × N] reliability sequence (least → most reliable)
-%   frozen_symbols : [(N−K) × 1] frozen symbols (encoder side)
+%   N_K            : Number of frozen symbol
 %   is_LLR         : boolean, true if prb1 contains LLRs, false if probabilities
 %
 % OUTPUT:
@@ -83,9 +83,7 @@
 %  (i+1,2*j−1)  (i+1,2*j)       (i+1,2*(j+1)−1)  (i+1,2*(j+1)) 
 % -----------------------------------------------------------------------------
 
-function decw = polar_nb_dec(prb1, Hadamard, reliab_seq, frozen_symbols, is_LLR)
-
-N_K = length(frozen_symbols);
+function decw = polar_nb_dec(prb1, Hadamard, reliab_seq, N_K, is_LLR)
 N   = size(prb1, 2);
 q   = size(prb1, 1);
 n   = log2(N);
@@ -96,10 +94,9 @@ if is_LLR
     prb1 = prb1 ./ sum(prb1, 1);
 end
 
-% Initialize decoded word and decision matrix
-decw = nan(N,1);
+% Initialize decision matrix
 V = nan(n+1, N);
-V(n+1, reliab_seq(1:N_K)) = frozen_symbols;
+V(n+1, reliab_seq(1:N_K)) = 0;
 
 % Propagate frozen values down through the decoding tree to avoid
 % performing unecssary VN/CN operations
@@ -201,6 +198,9 @@ while i > 0
             if isnan(V(n+1, j))
                 [~, nn] = max(prob_3d(i,j,:));
                 V(n+1,j) = nn - 1;
+            end
+            if j==N
+                break       %Decoding ends here!!
             end
         end
 
